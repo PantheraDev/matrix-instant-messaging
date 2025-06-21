@@ -1,0 +1,10 @@
+import { Controller, Post } from "@nestjs/common";
+
+@Controller("auth")
+export class AuthController {
+    @Post("login")
+    login() {
+        // Logic for user login
+        return { message: "User logged in successfully" };
+    }
+}
