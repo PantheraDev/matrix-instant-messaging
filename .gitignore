@@ -3,7 +3,9 @@
 
 ### Synapse ###
 
-/data
+/synapse
+/postgres
+/database
 
 ### Node ###
 # Logs

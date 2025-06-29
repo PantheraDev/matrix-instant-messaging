@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { AuthController } from './auth/auth.controller';
+import { HttpModule } from '@nestjs/axios';
+import { SynapseService } from './synapseService/synapse.service';
+import { MessageModule } from './message/message.module';
+import { RoomModule } from './room/room.module';
 
 @Module({
-  imports: [],
-  controllers: [AppController, AuthController],
-  providers: [AppService],
+  imports: [HttpModule, MessageModule, RoomModule],
+  controllers: [AuthController],
+  providers: [SynapseService],
 })
 export class AppModule {}
