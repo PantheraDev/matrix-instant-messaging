@@ -1,14 +1,98 @@
-version: '3.9'
+version: "3.8"
 
 services:
+  postgres:
+    image: postgres:16
+    container_name: matrix_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: synapse
+      POSTGRES_USER: synapse_user
+      POSTGRES_PASSWORD: synapse_pass
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+      LC_ALL: C
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+      - ./setup/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - matrix_net
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: matrix_pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@matrix.local
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - matrix_net
+
+  synapse-init:
+    image: matrixdotorg/synapse:latest
+    container_name: matrix_synapse_init
+    environment:
+      SYNAPSE_SERVER_NAME: localhost
+      SYNAPSE_REPORT_STATS: "no"
+    volumes:
+      - ./synapse/data:/data
+      - ./setup:/setup
+    entrypoint: >
+      /bin/bash -c "
+        if [ ! -f /data/homeserver.yaml ]; then
+          echo '📦 Generando configuración de Synapse...';
+          /start.py generate;
+          echo '🛠️  Parchando homeserver.yaml con configuración de PostgreSQL...';
+          /setup/patch-config.sh;
+        else
+          echo '✅ Configuración ya existente, omitiendo generación.';
+        fi
+      "
+    networks:
+      - matrix_net
+
   synapse:
     image: matrixdotorg/synapse:latest
-    container_name: synapse
-    restart: unless-stopped
+    container_name: matrix_synapse
+    depends_on:
+      - postgres
+      - synapse-init
     ports:
       - "8008:8008"
-    volumes:
-      - ./data:/data
     environment:
-      - SYNAPSE_SERVER_NAME=localhost
-      - SYNAPSE_REPORT_STATS=no
+      SYNAPSE_SERVER_NAME: localhost
+      SYNAPSE_REPORT_STATS: "no"
+    volumes:
+      - ./synapse/data:/data
+    entrypoint: >
+      /bin/bash -c "
+        while [ ! -f /data/homeserver.yaml ]; do
+          echo '⏳ Esperando a que se genere homeserver.yaml...';
+          sleep 1;
+        done;
+        echo '✅ Archivo homeserver.yaml encontrado.';
+        
+        echo '🔗 Verificando conectividad con PostgreSQL...';
+        until timeout 1 bash -c '</dev/tcp/postgres/5432'; do
+          echo '⏳ Esperando a que PostgreSQL esté listo...';
+          sleep 2;
+        done;
+        echo '✅ PostgreSQL está listo. Iniciando Synapse...';
+        
+        /start.py
+      "
+    networks:
+      - matrix_net
+
+networks:
+  matrix_net:
+    driver: bridge
+
+volumes:
+  pgadmin_data:
